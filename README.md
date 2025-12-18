@@ -1,144 +1,209 @@
-A small distributed storage demo:
-- Content-addressed object store (SHA-256 OIDs)
-- Key→metadata index (versioned)
-- Quorum replication (write + read with read-repair)
-- Simple PoW ledger that commits metadata entries, with Merkle root per block
-- Dockerized 3-node cluster + smoke test + GitHub Actions CI
 
-## Quickstart (Docker, 3 nodes)
+````md
+# Distributed Storage + Ledger (3-node cluster)
+
+A small **distributed object + key-value storage system** with:
+- **Content-addressed object store** (`/objects`, SHA-256 OIDs)
+- **Key → metadata mapping** (`/keys/*`) with versioning
+- **Quorum replication** for writes + reads (`/quorum/keys/*`) and **read-repair**
+- A simple **blockchain-style ledger** that records key snapshots, with **Merkle root** + **Proof-of-Work** mining (`/ledger/*`)
+
+This is an implementation-oriented distributed systems project (distributed storage + “small blockchain” style ledger), matching common DS project categories. :contentReference[oaicite:0]{index=0}
+
+---
+
+## Features
+
+### Storage
+- `POST /objects` stores raw bytes and returns an **OID** (SHA-256 of the bytes).
+- `GET /objects/{oid}` returns the bytes.
+- `GET /storage/stats` returns total object count and bytes.
+
+### Key-value metadata
+- Keys map to an object OID + metadata:
+  - `version` auto-increments on updates
+  - `ts` (timestamp)
+  - `writer` (node id)
+
+### Quorum replication (3 nodes)
+- **Quorum write** replicates to multiple nodes and returns ACK summary.
+- **Quorum read** reads from multiple nodes and returns the “best” value; can repair stale replicas.
+
+### Ledger
+- `POST /ledger/mine` mines a block that contains key entries (key → oid snapshot).
+- Each block includes:
+  - `prev_hash`
+  - `merkle_root` of entries
+  - `nonce`
+  - PoW `hash` that must start with a difficulty prefix (default examples use `"000"`).
+- `GET /ledger/verify` validates chain integrity + PoW + Merkle roots.
+
+---
+
+## Quickstart
+
+### Run 3-node cluster (Docker)
 
 ```bash
 docker compose up --build -d
 docker compose ps
+````
 
+Health checks:
+
+```bash
 curl -s http://localhost:8001/health; echo
 curl -s http://localhost:8002/health; echo
 curl -s http://localhost:8003/health; echo
-Object store demo
-bash
-Copy code
-OID=$(printf "hello object" | curl -s -X POST --data-binary @- http://localhost:8001/objects | python3 -c "import sys,json; print(json.load(sys.stdin)['oid'])")
-echo "OID=$OID"
-curl -s http://localhost:8001/objects/$OID; echo
-Quorum key write/read demo
-bash
-Copy code
-curl -s -X PUT --data-binary "replicated value v1" http://localhost:8001/quorum/keys/qkey1; echo
+```
 
-# Read from other nodes (body is the stored value)
-curl -i http://localhost:8002/quorum/keys/qkey1
-curl -i http://localhost:8003/quorum/keys/qkey1
-Ledger demo
-bash
-Copy code
-curl -s -X POST http://localhost:8001/ledger/mine \
+---
+
+## API Examples
+
+### 1) Object store (single node)
+
+```bash
+OID=$(printf "hello object" | curl -s -X POST --data-binary @- http://localhost:8001/objects \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['oid'])")
+
+echo "OID=$OID"
+curl -s "http://localhost:8001/objects/$OID"; echo
+```
+
+### 2) Quorum write + quorum read
+
+Write via node1 (replicates to the cluster):
+
+```bash
+curl -s -X PUT --data-binary "replicated value v1" \
+  "http://localhost:8001/quorum/keys/qkey1"; echo
+```
+
+Read from node2 and node3:
+
+```bash
+curl -i "http://localhost:8002/quorum/keys/qkey1"
+curl -i "http://localhost:8003/quorum/keys/qkey1"
+```
+
+> The quorum read response includes headers like:
+>
+> * `x-ds-key`, `x-ds-oid`, `x-ds-version`, `x-ds-writer`
+
+### 3) Mine a ledger block from keys
+
+```bash
+curl -s -X POST "http://localhost:8001/ledger/mine" \
   -H "Content-Type: application/json" \
   -d '{"keys":["qkey1"],"difficulty_prefix":"000"}'; echo
+```
 
-curl -s http://localhost:8001/ledger/verify; echo
-curl -s http://localhost:8001/ledger | python3 -c "import sys,json; j=json.load(sys.stdin); print('blocks', j['blocks']); print('last_hash', j['chain'][-1]['hash'])"
-Smoke test
-bash
-Copy code
-./scripts/smoke.sh
-Failure demo (optional)
-This shows quorum write succeeds even if one node is down (because W=2).
+Verify chain:
 
-bash
-Copy code
-docker compose up --build -d
-docker compose stop node3
+```bash
+curl -s "http://localhost:8001/ledger/verify"; echo
+```
 
-curl -s -X PUT --data-binary "value with node3 down" http://localhost:8001/quorum/keys/failkey1; echo
-curl -s http://localhost:8002/quorum/keys/failkey1; echo
+View chain summary:
 
-docker compose start node3
-curl -s http://localhost:8003/quorum/keys/failkey1; echo
-Developer notes
-FastAPI docs: http://localhost:8001/docs
-
-Data persistence: each node stores data under ./data/node{1,2,3} via Docker volumes.
-EOF
-
-python
-Copy code
+```bash
+curl -s "http://localhost:8001/ledger" \
+ | python3 -c "import sys,json; j=json.load(sys.stdin); print('blocks', j['blocks']); print('last_hash', j['chain'][-1]['hash'])"
+```
 
 ---
 
-## 4) Add a short REPORT.md (for grading)
+## Smoke Test (recommended)
+
+Run the end-to-end smoke test:
+
 ```bash
-cat > REPORT.md <<'EOF'
-# DS Ledger Storage — Report
-
-## Overview
-This project implements a small distributed storage system with:
-1) a content-addressed object store (SHA-256),
-2) a versioned key→metadata index,
-3) quorum-based replication (write + read + read-repair),
-4) a simple proof-of-work ledger that commits metadata entries into blocks with a Merkle root.
-
-A Docker Compose cluster runs 3 nodes locally.
-
-## Architecture
-Each node runs a FastAPI server with local persistence:
-- objects: `/app/data/objects/<oid>`
-- key metadata: `/app/data/kv.json`
-- ledger: stored locally per node under `/app/data` (implementation file controls exact location)
-
-Nodes are configured with:
-- `NODE_ID` (e.g., node1)
-- `PEERS` (comma-separated peer base URLs)
-
-## Data model
-### Object (content-addressed)
-- OID = SHA-256 hex digest of the raw bytes.
-- Storing the same bytes twice returns the same OID.
-
-### Key metadata (versioned)
-Each key maps to metadata:
-- `key`, `oid`, `size`, `version`, `ts`, `writer`
-Version increments on every update.
-
-## Replication: quorum write/read
-### Quorum write
-- Client writes a value for a key to `/quorum/keys/{key}`.
-- The node stores the object locally and replicates the exact metadata + object to peers.
-- Success requires meeting a write quorum (W=2 by default).
-- The response includes acks and any failed peers.
-
-### Quorum read + read-repair
-- Client reads from `/quorum/keys/{key}`.
-- The node queries peers, picks the newest metadata (highest version / freshest), fetches the object bytes, and returns them.
-- If any replicas are behind, the node repairs them by pushing the newest metadata/object.
-
-## Ledger
-The ledger commits a set of key metadata entries into a mined block:
-- Each block includes `prev_hash`, `entries`, `merkle_root`, `nonce`, and `hash`.
-- PoW condition: block hash must start with a configured prefix (default “000”).
-- `/ledger/verify` validates chain linkage, Merkle roots, and PoW.
-
-## How to run
-```bash
-docker compose up --build -d
 ./scripts/smoke.sh
-Demo checklist
-GET /health on all 3 nodes
+```
 
-POST /objects then GET /objects/{oid}
+It will:
 
-PUT /quorum/keys/{key} then read from node2/node3
-
-POST /ledger/mine then GET /ledger/verify
-
-Failure demo: stop one node, write + read still works
-EOF
-
-yaml
-Copy code
+1. Start the 3-node cluster
+2. Wait for `/health`
+3. Quorum write a fresh key
+4. Quorum read it back from another node
+5. Mine a ledger block containing that key
+6. Verify the ledger
 
 ---
 
-## 5) Quick sanity checks + run smoke
+## Endpoints (high-level)
+
+### Node health / stats
+
+* `GET /health`
+* `GET /storage/stats`
+
+### Objects (content-addressed)
+
+* `POST /objects`  (raw bytes → `{ "oid": "..." }`)
+* `GET /objects/{oid}`
+
+### Local key metadata (single node)
+
+* `PUT /keys/{key}` (raw bytes)
+* `GET /keys/{key}` (metadata JSON)
+* `GET /keys` (list keys)
+
+### Quorum key operations (cluster)
+
+* `PUT /quorum/keys/{key}` (replicated write)
+* `GET /quorum/keys/{key}` (quorum read, may trigger read-repair depending on config/implementation)
+
+### Ledger
+
+* `POST /ledger/mine` (JSON: `{ "keys": [...], "difficulty_prefix": "000" }`)
+* `GET /ledger`
+* `GET /ledger/verify`
+
+---
+
+## Data / Persistence
+
+Docker mounts each node’s local data directory:
+
+* `./data/node1` → `/app/data`
+* `./data/node2` → `/app/data`
+* `./data/node3` → `/app/data`
+
+So data persists across container restarts unless you delete `./data/`.
+
+---
+
+## Troubleshooting
+
+### Ports already in use
+
+Stop the cluster and try again:
+
 ```bash
-python -m py_compile $(git ls-files '*.py')
-./scripts/smoke.sh
+docker compose down
+docker compose up --build -d
+```
+
+### Clean everything (including volumes/data)
+
+```bash
+docker compose down -v
+rm -rf data/
+```
+
+---
+
+## Repo Tips
+
+* `.dockerignore` avoids sending local venv/data into Docker build context.
+* `.gitignore` keeps `data/`, `.venv/`, logs, and backups out of git.
+* GitHub Actions workflow runs `./scripts/smoke.sh` on push / PR (CI).
+
+```
+
+If you want, paste your current `README.md` here and I’ll sanity-check formatting + command blocks (so it renders perfectly on GitHub).
+::contentReference[oaicite:1]{index=1}
+```
