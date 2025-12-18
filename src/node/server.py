@@ -5,6 +5,7 @@ from src.node import storage
 from src.node import kv
 from src.node import quorum
 from src.node import quorum_read
+from src.node.ledger_api import router as ledger_router
 
 
 def _env_list(name: str) -> list[str]:
@@ -17,7 +18,8 @@ def _env_list(name: str) -> list[str]:
 NODE_ID = os.getenv("NODE_ID", "node0")
 PEERS = _env_list("PEERS")
 
-app = FastAPI(title="DS Ledger Storage Node", version="0.6.0")
+app = FastAPI(title="DS Ledger Storage Node", version="0.7.0")
+app.include_router(ledger_router)
 
 
 @app.get("/health")
