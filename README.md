@@ -202,7 +202,3 @@ rm -rf data/
 * GitHub Actions workflow runs `./scripts/smoke.sh` on push / PR (CI).
 
 ```
-
-
-::contentReference[oaicite:1]{index=1}
-```
