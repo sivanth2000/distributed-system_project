@@ -7,7 +7,7 @@ A small **distributed object + key-value storage system** with:
 - **Quorum replication** for writes + reads (`/quorum/keys/*`) and **read-repair**
 - A simple **blockchain-style ledger** that records key snapshots, with **Merkle root** + **Proof-of-Work** mining (`/ledger/*`)
 
-This is an implementation-oriented distributed systems project (distributed storage + “small blockchain” style ledger), matching common DS project categories. :contentReference[oaicite:0]{index=0}
+This is an implementation-oriented distributed systems project (distributed storage + “small blockchain” style ledger), matching common DS project categories.
 
 ---
 
@@ -27,6 +27,8 @@ This is an implementation-oriented distributed systems project (distributed stor
 ### Quorum replication (3 nodes)
 - **Quorum write** replicates to multiple nodes and returns ACK summary.
 - **Quorum read** reads from multiple nodes and returns the “best” value; can repair stale replicas.
+- PUT /quorum/keys/{key} accepts raw bytes (the value) and replicates it (N=3, W=2).
+- GET /quorum/keys/{key} returns the raw bytes, and metadata is returned via headers (x-ds-oid, x-ds-version, x-ds-writer, etc.) (if that’s how your server works — your curl output suggests it does).
 
 ### Ledger
 - `POST /ledger/mine` mines a block that contains key entries (key → oid snapshot).
@@ -36,6 +38,7 @@ This is an implementation-oriented distributed systems project (distributed stor
   - `nonce`
   - PoW `hash` that must start with a difficulty prefix (default examples use `"000"`).
 - `GET /ledger/verify` validates chain integrity + PoW + Merkle roots.
+- GET /ledger returns the full chain; GET /ledger/verify validates PoW + hashes.
 
 ---
 
