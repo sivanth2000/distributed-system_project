@@ -1,5 +1,4 @@
 
-````md
 # Distributed Storage + Ledger (3-node cluster)
 
 A small **distributed object + key-value storage system** with:
@@ -204,6 +203,6 @@ rm -rf data/
 
 ```
 
-If you want, paste your current `README.md` here and I’ll sanity-check formatting + command blocks (so it renders perfectly on GitHub).
+
 ::contentReference[oaicite:1]{index=1}
 ```
