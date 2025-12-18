@@ -200,5 +200,3 @@ rm -rf data/
 * `.dockerignore` avoids sending local venv/data into Docker build context.
 * `.gitignore` keeps `data/`, `.venv/`, logs, and backups out of git.
 * GitHub Actions workflow runs `./scripts/smoke.sh` on push / PR (CI).
-
-```
