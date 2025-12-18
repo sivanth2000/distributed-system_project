@@ -1,8 +1,20 @@
-.venv/
+# Python
 __pycache__/
 *.pyc
-.env
-dist/
-build/
-*.log
+*.pyo
+*.pyd
+
+# Virtualenv
+.venv/
+# Local data / volumes
 data/
+
+# Logs
+*.log
+
+# Backups
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db
