@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request, Response, HTTPException
 from src.node import storage
 from src.node import kv
 from src.node import quorum
+from src.node import quorum_read
 
 
 def _env_list(name: str) -> list[str]:
@@ -16,7 +17,7 @@ def _env_list(name: str) -> list[str]:
 NODE_ID = os.getenv("NODE_ID", "node0")
 PEERS = _env_list("PEERS")
 
-app = FastAPI(title="DS Ledger Storage Node", version="0.5.0")
+app = FastAPI(title="DS Ledger Storage Node", version="0.6.0")
 
 
 @app.get("/health")
@@ -98,6 +99,24 @@ async def put_key_quorum(key: str, request: Request, w: int | None = None):
         raise HTTPException(status_code=503, detail=result)
 
     return result
+
+
+# Quorum read (returns raw bytes; metadata in headers)
+@app.get("/quorum/keys/{key}")
+def get_key_quorum(key: str, r: int | None = None, repair: bool = True):
+    result = quorum_read.quorum_fetch(key=key, peers=PEERS, r=r, repair=repair)
+
+    if not result["ok"]:
+        raise HTTPException(status_code=503, detail=result)
+
+    winner = result["winner"]
+    headers = {
+        "X-DS-Key": str(key),
+        "X-DS-OID": str(winner.get("oid", "")),
+        "X-DS-Version": str(winner.get("version", "")),
+        "X-DS-Writer": str(winner.get("writer", "")),
+    }
+    return Response(content=result["data"], media_type="application/octet-stream", headers=headers)
 
 
 # Internal endpoint: write metadata EXACTLY as provided (for replication).
