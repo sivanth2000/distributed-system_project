@@ -2,10 +2,10 @@
 set -euo pipefail
 
 cleanup () {
-  # Always stop containers when the script ends (success or failure)
   docker compose down -v >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+
 wait_health () {
   local port="$1"
   for i in {1..80}; do
@@ -17,6 +17,7 @@ wait_health () {
   echo "ERROR: node on port ${port} did not become healthy"
   exit 1
 }
+
 echo "[smoke] clean start..."
 docker compose down -v >/dev/null 2>&1 || true
 
@@ -27,11 +28,12 @@ echo "[smoke] waiting for health..."
 wait_health 8001
 wait_health 8002
 wait_health 8003
+
 KEY="smoke_$(date +%s)"
 VAL="hello smoke $(date -Is)"
 
 echo "[smoke] quorum write to node1: key=${KEY}"
-curl -s -X PUT --data-binary "${VAL}" "http://localhost:8001/quorum/keys/${KEY}" > /tmp/smoke_put.json
+curl -sf -X PUT --data-binary "${VAL}" "http://localhost:8001/quorum/keys/${KEY}" > /tmp/smoke_put.json
 
 echo "[smoke] quorum read from node2 and verify body..."
 BODY="$(curl -sf "http://localhost:8002/quorum/keys/${KEY}")"
@@ -43,7 +45,7 @@ if [[ "${BODY}" != "${VAL}" ]]; then
 fi
 
 echo "[smoke] mine ledger block on node1..."
-curl -s -X POST "http://localhost:8001/ledger/mine" \
+curl -sf -X POST "http://localhost:8001/ledger/mine" \
   -H "Content-Type: application/json" \
   -d "{\"keys\":[\"${KEY}\"],\"difficulty_prefix\":\"000\"}" > /tmp/smoke_mine.json
 
@@ -53,5 +55,6 @@ import json, urllib.request
 j = json.loads(urllib.request.urlopen("http://localhost:8001/ledger/verify").read())
 assert j.get("ok") is True, j
 print("[smoke] ledger OK, blocks =", j.get("blocks"))
-OY
+PY
+
 echo "[smoke] ✅ SMOKE_OK"
